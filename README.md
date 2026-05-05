@@ -1,86 +1,90 @@
-# Week 12 — Knowledge Gap Formulation for Compounding
+# Knowledge Gap Formulation for Compounding
 
-**Trainee:** Yonas Mekonnen
-**Program:** TRP1 — 10 Academy
-**Week:** 12 (2026-05-04 to 2026-05-09)
-**Final submission deadline:** Saturday 2026-05-09, 21:00 UTC
+A five-day paired research sprint that systematically closes understanding gaps in production AI systems — from LoRA adaptation mechanics to response-collapse detection — and publishes each finding as a standalone public explainer.
+
+## What This Is
+
+Building AI systems is fast. Understanding *why* they work the way they do is slow. This project takes the systems I shipped — a sales-agent evaluation benchmark, a fine-tuned judge model, a preference dataset — and audits them for gaps between what I built and what I can actually defend under scrutiny.
+
+Each day follows the same loop:
+
+1. **Surface a gap** — find the specific mechanism in my own shipped work that I cannot explain if pressed
+2. **Sharpen it with a partner** — morning call to interrogate and tighten the question
+3. **Research and write** — read canonical sources, run experiments, write an explainer for the partner's gap
+4. **Revise and commit** — evening call for feedback, then commit a concrete improvement to existing portfolio work
+
+Every research cycle produces two public artifacts (a blog post and a tweet thread) and one grounding commit that improves a previously shipped artifact.
+
+## Grounding Target
+
+All research is grounded against **[Tenacious-Bench](https://github.com/Sanoy24/tenacious-bench)** — a sales-agent evaluation benchmark featuring a fine-tuned judge model (Qwen2.5-3B, SimPO-trained on 618 preference pairs).
+
+| Artifact | Link |
+| --- | --- |
+| Evaluation benchmark | [Sanoy24/tenacious-bench](https://github.com/Sanoy24/tenacious-bench) |
+| Preference dataset | [sanoy24/tenacious_bench_v0.1](https://huggingface.co/datasets/sanoy24/tenacious_bench_v0.1) |
+| Fine-tuned judge | [sanoy24/tenacious-judge-qwen25-3b-gamma15](https://huggingface.co/sanoy24/tenacious-judge-qwen25-3b-gamma15) |
 
 ---
 
-## What This Week Is
+## Published Explainers
 
-Five days of paired daily research. Each day: identify one real gap in your understanding of the AI systems you built in Weeks 10 and 11, sharpen it with a partner, research your partner's gap, write a public explainer, and commit a concrete improvement to the portfolio you already shipped.
+### Blog Posts
 
-Grounding target: [tenacious-bench (Week 11)](https://github.com/Sanoy24/tenacious-bench) and the Week 10 Conversion Engine.
+| Day | Title | Link |
+| --- | --- | --- |
+| 1 | Why Your LLM Sales Agent Gives the Same Answer to Every Question | [Substack →](https://open.substack.com/pub/yonasmekonnen/p/why-your-sales-agent-gives-the-same) |
+
+### Tweet / LinkedIn Threads
+
+*Links added as threads ship.*
+
+---
+
+## Research Log
+
+| Day | Topic | Gap Investigated | Partner | Grounding Commit |
+| --- | --- | --- | --- | --- |
+| 1 | Training & post-training mechanics | Why LoRA fine-tuning gradients are inherently low-rank, and what that means for rank selection on a 618-pair preference task | Amare Kassa | [`37b46c2`](https://github.com/Sanoy24/tenacious-bench/commit/37b46c2055b73834f951442a70118d28a0ee5a4b) — added intrinsic-dimensionality justification to `model_card.md` |
 
 ---
 
 ## Repository Structure
 
-```text
-.
-├── pair_DAY_1/          # Day 1 — Topic: Training & post-training mechanics (LoRA rank)
-│   ├── question.md              ✅ complete
-│   ├── morning_call_summary.md
-│   ├── explainer.md
-│   ├── thread.md
-│   ├── evening_call_summary.md
-│   ├── signoff.md
-│   ├── grounding_commit.md
-│   └── sources.md
-├── pair_DAY_2/          # Day 2 — Topic: TBD (cohort vote)
-├── pair_DAY_3/          # Day 3 — Topic: TBD (cohort vote)
-├── pair_DAY_4/          # Day 4 — Topic: TBD (cohort vote)
-├── pair_DAY_5/          # Day 5 — Topic: TBD (cohort vote)
-├── synthesis.md
-├── canonical_list.md
-├── portfolio_update.md
-└── docs/                # Challenge documents and reference materials
+```
+├── pair_DAY_1/          # Day 1 — LoRA rank selection & response collapse
+│   ├── question.md              # Final sharpened question with artifact connection
+│   ├── morning_call_summary.md  # How the question was interrogated and tightened
+│   ├── explainer.md             # Blog post written for partner's gap
+│   ├── thread.md                # Tweet thread, ready to publish
+│   ├── evening_call_summary.md  # Feedback given and revisions made
+│   ├── signoff.md               # Gap-closure judgment
+│   ├── grounding_commit.md      # Pointer to concrete portfolio edit
+│   └── sources.md               # Canonical sources and tools used
+├── pair_DAY_2/ … pair_DAY_5/    # Same structure, one folder per day
+│
+├── synthesis.md          # Cross-week patterns across all gaps closed
+├── canonical_list.md     # Annotated reading list — papers, tools, patterns
+├── portfolio_update.md   # How grounding commits improve the shipped portfolio
+└── docs/                 # Challenge specification and reference material
 ```
 
-Each `pair_DAY_N/` folder contains 8 required files per the Week 12 challenge spec:
-
-| File                      | Contents                                                              |
-| ------------------------- | --------------------------------------------------------------------- |
-| `question.md`             | Final sharpened question + named artifact connection                  |
-| `morning_call_summary.md` | 3–5 sentences on how the question was sharpened in the morning call   |
-| `explainer.md`            | 600–1,000 word blog post written for partner's question               |
-| `thread.md`               | 4–6 tweet/LinkedIn thread, ready to publish                           |
-| `evening_call_summary.md` | 3–5 sentences on feedback given and revisions made                    |
-| `signoff.md`              | Gap-closure judgment (closed / partially / not closed) + what changed |
-| `grounding_commit.md`     | Pointer to actual edit made to Week 10 or 11 artifact                 |
-| `sources.md`              | Two canonical sources + tool used hands-on                            |
+Each `pair_DAY_N/` folder captures the full research cycle: the question that was asked, the negotiation that sharpened it, the explainer that answered it, the feedback that revised it, and the commit that grounded it in real work.
 
 ---
 
-## Public Artifacts
+## Key Concepts Explored
 
-_URLs added after each day's evening call revision and publication._
-
-### Blog Posts
-
-| Day   | Topic                                                                             | URL |
-| ----- | --------------------------------------------------------------------------------- | --- |
-| Day 1 | Why LoRA rank is not an arbitrary default — the intrinsic dimensionality argument |     |
-| Day 2 | TBD                                                                               |     |
-| Day 3 | TBD                                                                               |     |
-| Day 4 | TBD                                                                               |     |
-| Day 5 | TBD                                                                               |     |
-
-### Tweet / LinkedIn Threads
-
-| Day   | URL |
-| ----- | --- |
-| Day 1 |     |
-| Day 2 |     |
-| Day 3 |     |
-| Day 4 |     |
-| Day 5 |     |
+- **LoRA intrinsic dimensionality** — why low-rank adaptation works for narrow-domain fine-tuning, and how to reason about rank selection
+- **Response collapse in LLM agents** — detecting mode collapse via pairwise embedding similarity, and fixing it through contrastive preference pairs
+- **Reward model overoptimization** — how proxy reward signals diverge from task performance (Gao et al., 2022)
+- **Degenerate text generation** — why likelihood maximization produces generic outputs (Holtzman et al., 2020)
 
 ---
 
-## Week 11 Portfolio (Grounding Target)
+## Author
 
-- **GitHub repo:** [Sanoy24/tenacious-bench](https://github.com/Sanoy24/tenacious-bench)
-- **HuggingFace dataset:** [sanoy24/tenacious_bench_v0.1](https://huggingface.co/datasets/sanoy24/tenacious_bench_v0.1)
-- **HuggingFace model:** [sanoy24/tenacious-judge-qwen25-3b-gamma15](https://huggingface.co/sanoy24/tenacious-judge-qwen25-3b-gamma15)
+**Yonas Mekonnen**
+
+- GitHub: [@Sanoy24](https://github.com/Sanoy24)
+- Substack: [yonasmekonnen](https://open.substack.com/pub/yonasmekonnen)
