@@ -1,36 +1,15 @@
-# Sign-off - Day 2
+# Day 2 — Sign-Off
 
-**Asker:** Mamaru Yirga  
-**Explainer:** Yonas Eshete  
-**Question:** Token-level classification mechanics in `reply_agent.py`
+**Asker:** Mamaru Yirga
 
----
+**Gap closure status:** Closed
 
-## Gap closure judgment
+**What I understand now that I didn't before:**
 
-The explainer closes the gap I asked about.
+Before reading this explainer, I assumed the model "classified" intent the way a trained classifier head does — picking from a fixed set of outputs. I now understand the actual mechanism: the LLM fallback in `classify_reply()` is next-token generation under prompt pressure, not a separate classification module. The seven label strings work because the system prompt biases the next-token probability distribution toward those continuations. But the prompt does not physically prevent invalid outputs — the model can still generate `"interested"`, `"Rejection"`, or JSON wrapped in a markdown fence, all of which would silently fail my original `json.loads()` call.
 
-My question was not asking for generic classifier best practices. I wanted to understand what happens when my prompt-only LLM classifier appears to choose one of seven labels, and why keyword pre-screening handles most cases before the LLM fallback runs.
+The second insight that closed the gap is the lexical vs compositional distinction. Keyword rules add value when intent is visible in a phrase — `"not interested"`, `"send me pricing"`, `"tell me more"`. The LLM adds value when intent depends on how phrases relate to each other — contrast, qualification, implied refusal. That distinction explains why 80% pre-screening is not a hack: most sales replies have explicit lexical intent, and a deterministic rule is faster, cheaper, and more predictable than an LLM call for those cases. The LLM earns its cost only on the ambiguous 20%.
 
-The explanation answered that directly. The core mechanism is now clear: the LLM path is next-token generation under label pressure, not a separate classification head. The prompt makes the seven labels likely, but it does not guarantee that the output will be a valid enum. That distinction explains why prompt-only JSON is weaker than constrained decoding or explicit enum validation.
+The third thing I now understand is that the `"interested"` keyword in my positive list was a latent false-positive risk. The explainer's worked example made it concrete: `"I am not interested enough to continue"` would have matched `"interested"` and returned `POSITIVE_INTEREST` with 0.88 confidence. The rejection tier runs first, so `"not interested"` is caught, but the broader `"interested"` substring is not safe. Removing it and letting those cases fall to the LLM is the right call.
 
-## What changed in my understanding
-
-Before this explainer, I treated the LLM fallback as if it were "doing classification" in a special way. After the explainer, I understand that it is still generating tokens. The label list in the prompt shapes the probability distribution, but the boundary is only reliable if the output is constrained or validated.
-
-The keyword layer also makes more sense now. It is not a crude shortcut; it is the correct first tier for lexical intent. Replies like "not interested" or "send me pricing" do not need an LLM. The LLM is useful for compositional cases: mixed signals, contrastive phrasing, implied rejection, or replies where the surface keywords are misleading.
-
-## Why this changes the artifact
-
-The explainer gives me a concrete direction for improving `agent/llm/reply_agent.py`:
-
-- keep keyword pre-screening for obvious lexical replies
-- constrain or validate the `intent` field against the `ReplyIntent` enum
-- leave `reasoning` and `key_quote` as freer natural-language fields
-- log keyword-tier versus LLM-fallback performance before considering a fine-tuned classifier
-
-The hands-on check against the actual repo made the issue visible. It showed that valid JSON such as `{"intent": "interested"}` can still fail the enum boundary, and that small phrasing differences can route a reply from keyword matching to LLM fallback.
-
-## Final sign-off
-
-I consider the gap closed. The explainer gives me both the mechanism and the implementation direction: do not rely on prompt-only JSON for the intent label; make the label boundary explicit through constrained decoding, structured output support, or enum validation.
+The grounding commits — enum repair, tier logging, and keyword removal — are all direct consequences of understanding the mechanism, not just following a recommendation.
