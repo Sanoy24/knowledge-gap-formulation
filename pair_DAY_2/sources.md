@@ -2,7 +2,7 @@
 
 ## Question
 
-Amare's question asks why `agent/llm/reply_agent.py` can usually classify a reply into one of seven intent labels, what is happening at the token level when the LLM does that, and why keyword pre-screening handles most cases before the LLM fallback runs.
+Mamaru's question asks why `agent/llm/reply_agent.py` can usually classify a reply into one of seven intent labels, what is happening at the token level when the LLM does that, and why keyword pre-screening handles most cases before the LLM fallback runs.
 
 ## Source 1
 
@@ -16,10 +16,10 @@ Amare's question asks why `agent/llm/reply_agent.py` can usually classify a repl
 This paper explains guided generation: constraining LLM output with regular expressions or context-free grammars by treating generation as transitions through valid states. The relevant mechanism for this explainer is constrained decoding, where invalid next-token continuations can be masked so the model can only produce outputs that satisfy the allowed structure.
 
 **How it is used in the explainer:**  
-It supports the section on replacing prompt-only JSON with a constrained label boundary. For Amare's classifier, the useful application is small: constrain the `intent` field to one of seven enum values instead of merely asking the model to choose one.
+It supports the section on replacing prompt-only JSON with a constrained label boundary. For Mamaru's classifier, the useful application is small: constrain the `intent` field to one of seven enum values instead of merely asking the model to choose one.
 
 **What I am not claiming from it:**  
-I am not claiming this paper was tested on Amare's repo or that it measured his exact intent classifier. I use it only for the decoding mechanism behind grammar/enum-constrained generation.
+I am not claiming this paper was tested on Mamaru's repo or that it measured his exact intent classifier. I use it only for the decoding mechanism behind grammar/enum-constrained generation.
 
 ## Source 2
 
@@ -43,7 +43,7 @@ I am not claiming the paper proves constrained decoding always improves classifi
 **File:** `signal-driven-sales-conversion-engine/agent/llm/reply_agent.py`  
 
 **Why it matters:**  
-This is the implementation Amare's question points to. The explainer uses it to ground the analysis in the actual classifier shape:
+This is the implementation Mamaru's question points to. The explainer uses it to ground the analysis in the actual classifier shape:
 
 - `ReplyIntent` defines seven labels.
 - `_CLASSIFY_SYSTEM` asks the LLM to return JSON with one intent.

@@ -1,23 +1,33 @@
-# Question — Day 2
+# Question - Day 2
 
-**Asker:** Yonas Eshete
-**Topic:** Agent and tool-use internals — *The mechanics of "Premature Execution Bias" and why models suppress clarification questions.*
+**Asker:** Yonas Eshete  
+**Topic:** Agent and tool-use internals - the mechanics of premature execution bias and suppressed clarification questions  
 **Date:** 2026-05-06
 
 ---
 
 ## The Question
 
-While evaluating my Week 10 Conversion Engine against the τ²-Bench retail tasks, I documented a severe failure mode in my probe library (Probes P023, P024, and P025): **premature tool execution**. 
+While evaluating my Week 10 Conversion Engine against tau2-Bench retail-style tasks, I documented a severe failure mode in my probe library, especially probes P023, P024, and P025: **premature tool execution**.
 
-When a prospect asked "cancel my last order", the agent lacked the required `order_id`. Instead of simply emitting text to ask "What is your order ID?", the agent fabricated an ID just so it could immediately fire the `cancel_pending_order` tool. I had to build a heavy SCAP (Signal Confidence Aware Phrasing) postscript injected into `eval/run_heldout.py` just to force the model to "Ask-not-assert."
+When a user asked to "cancel my last order", the agent lacked the required `order_id`. Instead of asking "What is your order ID?", it fabricated an ID and immediately called `cancel_pending_order`.
 
-**What is happening at the token level during function-calling that makes generating a conversational clarification question so mathematically unlikely compared to forcing a tool call?**
+I patched this with a heavy SCAP (Signal Confidence Aware Phrasing) postscript in `eval/run_heldout.py` to force the model to ask, not assert, when required evidence is missing. The patch improved behavior, but it feels like I am fighting the model with prompt text instead of designing a safer tool boundary.
 
-Is this purely an artifact of how tool-use is rewarded during RLHF — where "stalling" is heavily penalized and executing a tool is treated as task success? When the attention heads process the structured JSON tool schemas in the system prompt, does the probability mass shift so heavily toward the `<tool_call>` control token that the model's normal conversational reasoning is suppressed? 
+**Why does a function-calling LLM prefer fabricating missing required arguments and executing a tool over asking the user a clarifying question?**
+
+I want to understand whether this comes from tool-use training, benchmark pressure toward action, the presence of tool schemas in context, or the way the agent interface represents clarification. The answer should explain the mechanism well enough to decide whether my fix should be prompt-based, validation-based, or structural.
+
+---
 
 ## Artifact Connection
 
-Knowing this mechanism would let me completely refactor the scaffolding in my agent. Specifically, it would allow me to delete the 20-line `SCAP_POSTSCRIPT` string from `eval/run_heldout.py` (which currently tries to "fight" the model using prompt engineering) and instead inject an `ask_clarifying_question(question_text)` tool directly into the agent's context. 
+Closing this gap changes how I improve my Week 10 Conversion Engine.
 
-If I can understand the exact token probabilities that drive "Premature Execution Bias," I can confidently replace fragile prompt instructions with a structural tool interface, guaranteeing a higher pass rate on the τ²-Bench without hallucinating parameters. More broadly, every FDE engagement involving an agent requires deciding how to constrain destructive tools — knowing how to "absorb" rather than "fight" the model's tool bias is a universally applicable pattern.
+Right now, `eval/run_heldout.py` relies on a long `SCAP_POSTSCRIPT` prompt to reduce hallucinated tool arguments. If I understand the mechanism behind premature execution bias, I can replace or simplify that fragile prompt patch with a safer interface pattern, such as:
+
+- an explicit `ask_clarifying_question(question_text)` tool
+- required-argument validation before destructive tools execute
+- a planner/check step that routes missing arguments to clarification instead of tool execution
+
+This matters beyond this benchmark. In FDE work, agents often sit in front of real business tools: CRMs, calendars, billing systems, support workflows, and internal databases. A safe agent must know when it lacks required information and must ask before acting.
