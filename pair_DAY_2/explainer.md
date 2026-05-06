@@ -1,6 +1,6 @@
 # How your intent classifier actually picks one of seven strings
 
-Written by Yonas Eshete | For Amare Kassa's question
+Written by Yonas Eshete | For Mamaru Yirga's question
 
 You asked two things.
 
@@ -122,13 +122,13 @@ That is the fragile boundary. Prompt-only JSON can fail in two different ways:
 Examples:
 
 ```json
-{"intent": "interested"}
+{ "intent": "interested" }
 ```
 
 This is valid JSON, but `interested` is not one of your seven labels.
 
 ```json
-{"intent": "Rejection"}
+{ "intent": "Rejection" }
 ```
 
 This is valid JSON, but the capitalization does not match the enum.
@@ -199,7 +199,7 @@ The reply is:
 An unconstrained generation path might produce:
 
 ```json
-{"intent": "interested"}
+{ "intent": "interested" }
 ```
 
 The model reached for a natural word, but that word is not in the enum.
