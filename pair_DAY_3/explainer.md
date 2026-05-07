@@ -3,6 +3,7 @@
 **For:** Amir Ahmedin
 **Question:** Given that my 599 chosen outputs collapse to 111 unique strings from a 16-template library in `get_chosen()`, and my eval split is drawn from the same template pool as training, what does this imply for any preference-optimization recipe I run on this data, and what is the minimum structural change to my data pipeline that would make preference training capable of generalizing to the held-out scorer?
 **Author:** Yonas Eshete
+**Status:** revised after Amir's feedback (added diversity threshold, fixed scorer interface, softened the "templates pass in isolation" assumption)
 
 ---
 
@@ -26,24 +27,43 @@ Three pass rates from `ablation_results.json`, all measured by `evaluation/scori
 
 The trained model lost to a regex script. It also lost to its own untrained backbone by 28 percentage points. The most consistent explanation for that 28pp regression is mode collapse around the chosen-template manifold: training pushed the policy off the region where the held-out scorer rewards it, and onto a 111-mode subset where the model produces template-approximate strings with errors that the regex scorer punishes. That story is consistent with all three numbers; the alternative explanations (catastrophic forgetting, optimization failure) would not produce the specific pattern of trained < heuristic < prompted-base.
 
-You can confirm or refute this in fifteen minutes. Open `evaluation/scoring_evaluator.py`, find whatever entry point it uses to score a (prompt, response) pair against rubric checks, and run something like this:
+You can confirm or refute this in fifteen minutes using your real scorer interface (`TenaciousBenchEvaluator.score_task(task, agent_output)` from `evaluation/scoring_evaluator.py`):
 
 ```python
 import json
-from evaluation.scoring_evaluator import <your_scorer_entry_point>
+from evaluation.scoring_evaluator import TenaciousBenchEvaluator
 
-pairs = [json.loads(line) for line in open("training/training_data.jsonl")]
-passed = 0
-for p in pairs:
-    score = <your_scorer_entry_point>(prompt=p["prompt"], response=p["chosen"])
-    if score["passed_all_checks"]:  # adapt to whatever your evaluator returns
-        passed += 1
-print(f"Chosen-side pass rate against held-out scorer: {passed/len(pairs):.1%}")
+evaluator = TenaciousBenchEvaluator()
+
+# Load task definitions so we can score by task_id
+tasks_by_id = {}
+for partition in ["train", "dev"]:
+    for task in json.load(open(f"dataset/partitions/{partition}.json")):
+        tasks_by_id[task["task_id"]] = task
+
+# Pairs with task_id metadata (your prepare_training_data.py writes this file)
+pairs = json.load(open("training/preference_pairs_with_metadata.json"))
+
+passed, checked = 0, 0
+for pair in pairs:
+    task = tasks_by_id.get(pair["task_id"])
+    if not task:
+        continue
+    chosen = pair["chosen"]
+    # Parse the "Subject: X\n\nBody" string back into the structured agent_output
+    if "Subject:" in chosen:
+        subject = chosen.split("Subject:", 1)[1].split("\n", 1)[0].strip()
+        body = chosen.split("\n\n", 1)[1] if "\n\n" in chosen else ""
+    else:
+        subject, body = "", chosen
+    result = evaluator.score_task(task, {"email_subject": subject, "email_body": body})
+    passed += int(result.passed)
+    checked += 1
+
+print(f"Chosen-side pass rate against held-out scorer: {passed/checked:.1%} ({passed}/{checked})")
 ```
 
-(I don't know your exact scorer signature, so the snippet uses a placeholder. Adapt to your `scoring_evaluator.py` API.)
-
-Two outcomes are possible. If the pass rate is high (say 80%+), then the templates you wrote do satisfy the held-out scorer in isolation, and the failure is pure mode collapse: the model imperfectly imitates them at generation time. If the pass rate is low (under 60%), then your chosen data does not even satisfy the scorer it is meant to teach the model to satisfy, and the training objective is misaligned end-to-end. Either result is decisive. My read of `prepare_training_data.py` says you will land in the first case (templates were hand-authored to pass the rubric), but the test removes the doubt.
+Two outcomes are possible. If the pass rate is high (say 80%+), the templates do satisfy the scorer in isolation, and the failure at generation time is mode collapse — the model imperfectly imitates them. If the pass rate is low (under 60%), your chosen data does not even satisfy the scorer it is meant to teach the model to satisfy, and the training objective is misaligned end-to-end. I do not have a strong prior on which outcome you will see. Most of your TONE_PASSING and WORKFLOW_PASSING templates were hand-authored to pass, so those probably score high. But your RESOURCE_HONESTY_PASSING templates interpolate `{available}` and `{requested}` from `bench_state`, and depending on what those numbers are for a given task, some chosen rewrites might fail the bench-honesty check even though they were intended to pass. The diagnostic resolves it without me guessing.
 
 ## Three adjacent concepts that make the picture land
 
@@ -53,12 +73,26 @@ Two outcomes are possible. If the pass rate is high (say 80%+), then the templat
 
 **Train-eval contamination via shared generation source**. Your `train_test_split(test_size=0.1, seed=42)` puts 10% of the same 16 templates in eval. Your eval loss curve dropping from 1.99 to 0.96 measures how well the model learned the 16 templates, not whether it generalizes. This is why your in-loop signal looked clean while your held-out collapsed.
 
+## How much chosen-side diversity is enough
+
+You asked for a number. Here is the empirical anchor I have, with two data points (yours and mine):
+
+| Dataset                    | Pairs | Unique chosen | Ratio     | Held-out outcome                                                                                  |
+| -------------------------- | ----- | ------------- | --------- | ------------------------------------------------------------------------------------------------- |
+| Your tenacious-sales-bench | 599   | 111           | **0.185** | trained 30% < heuristic 34% < prompted-base 58% (catastrophic regression)                         |
+| My tenacious-bench (train) | 618   | 618           | **1.000** | trained 100% / 44 vs base 97.7% / 44 on held-out, p=0.372 (no regression, marginal lift)          |
+| My tenacious-bench (dev)   | 347   | 346           | **0.997** | —                                                                                                 |
+
+Two data points are not a paper, but they are a strong directional signal. My pipeline (DeepSeek V3 chosen-rewrites, scorer-gated, one rewrite per task) yields essentially every chosen string unique. Yours (template interpolation, 16 templates) yields 5.4 pairs per unique chosen on average. Recommendation: **target unique-chosen-to-total ratio ≥ 0.9**, which is the natural output of any LLM-call-per-task pipeline. Treat **0.5 as the danger floor** — at 0.5, half your pairs share chosen strings with at least one other pair, and the gradient overweights whatever surface pattern those duplicates share.
+
+A more principled diversity measure would use pairwise embedding cosine similarity (target: median pairwise cosine below some threshold like 0.7 on a sentence encoder), but the unique-string ratio is a fast first check that catches the worst case. If your post-fix pipeline yields ratio ≥ 0.9 you are almost certainly fine. If it yields 0.5–0.9 because your tasks are structurally similar enough that even an LLM produces near-duplicates, the embedding-similarity check is the next thing to run.
+
 ## The minimum structural change
 
 The strict minimum is two changes in `prepare_training_data.py`, run together:
 
-1. The chosen output is generated by an actual LLM call, not a template lookup. DeepSeek V3, GPT-4o, Claude, any of them. Real generations have natural diversity that templates do not, so the gradient stops latching onto template-surface markers.
-2. Every candidate chosen output is run through `evaluation/scoring_evaluator.py` before it enters the training set. If `passed_all_checks` is false, retry; if retries fail, drop the task. No pair enters training unless its chosen side passes the same scorer that evaluates held-out. This aligns the training reward with the held-out reward at the data level, before the trainer ever sees the data.
+1. The chosen output is generated by an actual LLM call, not a template lookup. DeepSeek V3, GPT-4o, Claude, any of them. Real generations have natural diversity that templates do not, so the gradient stops latching onto template-surface markers. Empirically this gets the unique-chosen-to-total ratio close to 1.0.
+2. Every candidate chosen output is run through `evaluation/scoring_evaluator.py` before it enters the training set. If `result.passed` is false, retry; if retries fail, drop the task. No pair enters training unless its chosen side passes the same scorer that evaluates held-out. This aligns the training reward with the held-out reward at the data level, before the trainer ever sees the data.
 
 Neither change works alone. (1) without (2) gives you diverse chosen outputs that may or may not satisfy the rubric, so the gradient still trains on a misaligned objective. (2) without (1) is what you already do conceptually (your templates were authored to pass the rubric), and that is exactly what produced the 30% trained pass rate. You need both.
 
@@ -71,4 +105,4 @@ None of this requires switching SimPO, raising rank, adding KL, or doing anythin
 - Meng, Xia, Chen, *SimPO: Simple Preference Optimization with a Reference-Free Reward*, NeurIPS 2024. The loss formulation that was used in your run.
 - Rafailov et al., *Direct Preference Optimization*, NeurIPS 2023. The reference-model term that SimPO drops, and that some practitioners re-introduce as a KL anchor when they hit overoptimization.
 - Gao, Schulman, Hilton, *Scaling Laws for Reward Model Overoptimization*, ICML 2023, arXiv:2210.10760. The canonical reference for "narrow reward produces narrow policy," the dynamic you are seeing in a different form.
-- Tool to run today: the diagnose snippet above against your `training_data.jsonl` chosen field, scored by `evaluation/scoring_evaluator.py`. The pass rate is the load-bearing number for whether you are in the mode-collapse case or the misaligned-objective case.
+- Tool to run today: the diagnostic above against your `training/preference_pairs_with_metadata.json` chosen field, scored by `evaluation/scoring_evaluator.py`. The pass rate is the load-bearing number for whether you are in the mode-collapse case or the misaligned-objective case.
